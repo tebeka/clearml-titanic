@@ -1,22 +1,37 @@
 import pickle
 from argparse import ArgumentParser
+from collections.abc import Sequence
 
 import pandas as pd
 from clearml import Task
+from clearml.config import config_obj
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 
+
+def as_plain_dict(obj):
+    if isinstance(obj, dict):
+        return {k: as_plain_dict(v) for k, v in obj.items()}
+
+    if isinstance(obj, Sequence) and not isinstance(obj, str):
+        return obj.__class__(as_plain_dict(v) for v in obj)
+
+    return obj
+
+
 parser = ArgumentParser()
 parser.add_argument('-ts', '--test-size', type=float, default=0.3)
-parser.add_argument('-c', '--clearml', action='store_true', default=False)
 parser.add_argument('-q', '--queue', default='')
 args = parser.parse_args()
 
-if args.clearml or args.queue:
-    task = Task.init(project_name='lab', task_name='titanic')
+task = Task.init(project_name='lab', task_name='titanic')
 
 if args.queue:
     task.execute_remotely(args.queue)  # Will exit the program
+
+
+cfg = config_obj.get('auto_scaler')
+print('CONFIG:', as_plain_dict(cfg))
 
 df = pd.read_csv('titanic.csv')
 
@@ -56,5 +71,4 @@ model_file = 'model.pkl'
 with open(model_file, 'wb') as out:
     pickle.dump(clf, out)
 
-if args.clearml:
-    task.upload_artifact('model', clf, auto_pickle=True)
+task.upload_artifact('model', clf, auto_pickle=True)
